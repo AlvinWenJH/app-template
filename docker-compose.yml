@@ -1,0 +1,83 @@
+services:
+  broker:
+    image: rabbitmq:management #rabbitmq:alpine #bitnami/rabbitmq:3.8.27 #latest
+    # volumes:
+    #   - ./conf/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    ports:
+      - 5672:5672
+      - 15675:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      ap-network:
+    restart: always
+
+  flower:
+    image: mher/flower:latest
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - FLOWER_UNAUTHENTICATED_API=${FLOWER_UNAUTHENTICATED_API}
+      - FLOWER_PORT=8888
+    ports:
+      - 8889:8888
+    depends_on:
+      - broker
+    networks:
+      ap-network:
+    restart: always
+
+  nginx:
+    image: nginx:latest
+    environment:
+      - APP_API_ADDRESS=${APP_API_ADDRESS}
+    volumes:
+      - ./conf/default.conf.template:/etc/nginx/templates/default.conf.template
+    ports:
+      - 80:80
+      - 81:81
+    networks:
+      ap-network:
+    depends_on:
+      - api
+    restart: always
+
+  api:
+    image: mmth-optimization:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    command:
+      gunicorn app.api.main:app --workers 1 --worker-class
+      uvicorn.workers.UvicornWorker --bind 0.0.0.0:80
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www
+    ports:
+      - "80"
+    networks:
+      ap-network:
+
+  worker:
+    image: mmth-optimization:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./:/var/www
+    command:
+      - /bin/sh
+      - -c
+      - celery -A app.worker.test worker --concurrency 2
+        --loglevel=info -n worker_test -Q test
+    depends_on:
+      - broker
+    networks:
+      ap-network:
+
+networks:
+  ap-network:
+    name: ap-network

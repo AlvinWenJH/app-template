@@ -1,0 +1,7 @@
+numpy
+pandas
+celery
+fastapi
+uvicorn
+gunicorn
+pydantic
